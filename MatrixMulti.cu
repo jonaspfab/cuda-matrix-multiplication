@@ -1,6 +1,8 @@
 #include <iostream>
 #include <stdio.h>
 #include <time.h>
+#include <cuda_runtime.h>
+#include "cublas_v2.h"
 #include "NaiveMatrixMulti.cu"
 #include "TilingMatrixMulti.cu"
 
@@ -10,15 +12,24 @@ using namespace std;
 #define NAIVE_2D 2
 #define TILING 3
 #define TILING_LOOP_UNROLLING 4
+#define CU_BLAS 5
 
-/** Prints given matrix to console */
-void printMatrix(int n, double *M) {
-	for (int i = 0; i < n; i++) {
-		for (int j = 0; j < n; j++)
-            cout << M[i * n + j] << "\t";
+/**
+ * Multiplies matrix 'A' and 'B' and stores result in 'Y' using the cuBLAS
+ * library
+ *
+ * Note that the matrix parameters must reference the device memory
+ *
+ * @param handle Created CuBlas handle
+ */
+void cuBlasMM(cublasHandle_t handle, int n, double *d_A, double *d_B, double *d_Y) {
+    double alpha = 1.0;
+	double beta = 0.0;
 
-        cout << endl;
-	}
+	cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, d_B, n, d_A, n, &beta, d_Y, n);
+    cudaThreadSynchronize();
+
+    cublasDestroy(handle);
 }
 
 /** Checks if matrix 'A' multiplied with matrix 'B' is 'Y' */
@@ -66,6 +77,11 @@ int main(int argc, char *argv[]) {
     int strategy = atoi(argv[2]);
     bool validateResult = argc > 3 ? !strcmp(argv[3], "-v") : false;
 
+    // Create handle here so it won't be included in timing
+    cublasHandle_t handle;
+    if (strategy == CU_BLAS)
+	    cublasCreate(&handle);
+
     // Matrices stored on host memory
     double *A, *B, *Y;
     // Matrices stored on device memory
@@ -102,6 +118,9 @@ int main(int argc, char *argv[]) {
         case TILING_LOOP_UNROLLING:
             tilingMM(n, d_A, d_B, d_Y, true);
             break;
+        case CU_BLAS:
+            cuBlasMM(handle, n, d_A, d_B, d_Y);
+            break;
         default:
             cout << "\'" << strategy << "\' is not a valid strategy" << endl;
             return -1;
@@ -111,8 +130,10 @@ int main(int argc, char *argv[]) {
 
     cudaMemcpy(Y, d_Y, size, cudaMemcpyDeviceToHost);
 
+    double nD = (double) n;
+
     cout << n << "\t";
-    cout << abs(((float)(n * n * n) / 1000000.0) / (((float) t) / CLOCKS_PER_SEC)) << endl;
+    cout << ((nD / 1000000.0) * nD * nD) / (t / ((double) CLOCKS_PER_SEC)) << endl;
     if (validateResult)
         cout << "Result is " << (isResultCorrect(n, A, B, Y) ? "correct" : "incorrect") << endl;
 
