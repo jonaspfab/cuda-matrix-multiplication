@@ -3,6 +3,9 @@
 
 using namespace std;
 
+#define BLOCK_SIZE_1D 1024
+#define BLOCK_SIZE_2D 32
+
 /**
  * CUDA kernel responsible for multiplying two matrices 'A' and 'B', using the 
  * naive approach, and storing result in matrix 'Y'
@@ -45,13 +48,17 @@ void naiveMM(int n, double *d_A, double *d_B, double *d_Y, bool use2D) {
     dim3 dimGrid, dimBlock;
     if (use2D) {
         // Total of 1024 threads
-        dimBlock = dim3(32, 32);
-        dimGrid = dim3((n + 31) / 32, (n + 31) / 32);
+        dimBlock = dim3(BLOCK_SIZE_2D, BLOCK_SIZE_2D);
+        int dimSize = (n + BLOCK_SIZE_2D - 1) / BLOCK_SIZE_2D;
+        dimGrid = dim3(dimSize, dimSize);
     } else {
-        dimBlock = dim3(1024);
-        dimGrid = dim3((n * n + 1023) / 1024);
+        dimBlock = dim3(BLOCK_SIZE_1D);
+        dimGrid = dim3((n * n + BLOCK_SIZE_1D - 1) / BLOCK_SIZE_1D);
     }
 
     naiveMMKernel<<<dimGrid, dimBlock>>>(n, d_A, d_B, d_Y, use2D);
     cudaThreadSynchronize();
+
+    cout << dimBlock.x << "x" << dimBlock.y << "\t\t";
+    cout << dimGrid.x << "x" << dimGrid.y << "\t\t";
 }

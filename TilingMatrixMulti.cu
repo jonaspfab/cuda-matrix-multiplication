@@ -8,6 +8,7 @@
  * approach, and storing result in matrix 'Y'
  */
 __global__ void tilingMMKernel(int n, double *A, double *B, double *Y) {
+    // Start indeces of the tile
     int ii = blockIdx.x * TILE_SIZE;
     int jj = blockIdx.y * TILE_SIZE;
 
@@ -38,6 +39,7 @@ __global__ void tilingMMKernel(int n, double *A, double *B, double *Y) {
  * 'Y'.
  */
 __global__ void tilingUnrollingMMKernel(int n, double *A, double *B, double *Y) {
+    // Start indeces of the tile
     int ii = blockIdx.x * TILE_SIZE;
     int jj = blockIdx.y * TILE_SIZE;
 
@@ -51,6 +53,7 @@ __global__ void tilingUnrollingMMKernel(int n, double *A, double *B, double *Y) 
     __shared__ double s_A[TILE_SIZE][TILE_SIZE], s_B[TILE_SIZE][TILE_SIZE];
 
     for (int kk = 0; kk < n; kk += TILE_SIZE) {
+        // Since there is less threads every thread has to copy more elements
         s_A[x][y] = A[i * n + kk + y];
         s_A[x + 1][y] = A[(i + 1) * n + kk + y];
         s_A[x][y + 1] = A[i * n + kk + y + 1];
@@ -84,17 +87,21 @@ __global__ void tilingUnrollingMMKernel(int n, double *A, double *B, double *Y) 
  * @param unroll Defines whether loop unrolling should be applied
  */
 void tilingMM(int n, double *d_A, double *d_B, double *d_Y, bool unroll) {
+    dim3 dimBlock, dimGrid;
     if (unroll) {
-        dim3 dimBlock(TILE_SIZE / 2, TILE_SIZE / 2);
-        dim3 dimGrid((n + TILE_SIZE - 1) / TILE_SIZE, (n + TILE_SIZE - 1) / TILE_SIZE);
+        dimBlock = dim3(TILE_SIZE / 2, TILE_SIZE / 2);
+        dimGrid = dim3((n + TILE_SIZE - 1) / TILE_SIZE, (n + TILE_SIZE - 1) / TILE_SIZE);
 
         tilingUnrollingMMKernel<<<dimGrid, dimBlock>>>(n, d_A, d_B, d_Y);
     } else {
-        dim3 dimBlock(TILE_SIZE, TILE_SIZE);
-        dim3 dimGrid((n + TILE_SIZE - 1) / TILE_SIZE, (n + TILE_SIZE - 1) / TILE_SIZE);
+        dimBlock = dim3(TILE_SIZE, TILE_SIZE);
+        dimGrid = dim3((n + TILE_SIZE - 1) / TILE_SIZE, (n + TILE_SIZE - 1) / TILE_SIZE);
 
         tilingMMKernel<<<dimGrid, dimBlock>>>(n, d_A, d_B, d_Y);
     }
 
     cudaThreadSynchronize();
+
+    cout << dimBlock.x << "x" << dimBlock.y << "\t\t";
+    cout << dimGrid.x << "x" << dimGrid.y << "\t\t";
 }
